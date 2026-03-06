@@ -3911,6 +3911,12 @@ function saveApiKey(val) {
     if (input) input.classList.add('valid');
     if (btn) btn.classList.add('configured');
     if (status) { status.innerHTML = '<span class="status-dot"></span> Prêt'; status.style.color = 'var(--accent2)'; }
+    // Persistance : localStorage + Firestore
+    try { localStorage.setItem('nutriai_api_key', _apiKey); } catch(e) {}
+    if (currentUser) {
+      db.collection('users').doc(currentUser.uid).set({ api_key: _apiKey }, { merge: true })
+        .catch(err => console.warn('Firestore api_key save error:', err));
+    }
   } else {
     if (input) input.classList.remove('valid');
     if (btn) btn.classList.remove('configured');
@@ -3932,10 +3938,18 @@ function checkApiKeyOnLoad() {
   const bar = document.getElementById('apiKeyBar');
   const input = document.getElementById('apiKeyInput');
   const status = document.getElementById('chatStatus');
-  // Always show the key bar on load so user can paste their key
-  bar.style.display = 'block';
-  if (status) { status.innerHTML = '<span class="status-dot" style="background:var(--accent3)"></span> Entrer ta clé 🔑'; status.style.color = 'var(--accent3)'; }
-  setTimeout(() => { if (input) input.focus(); }, 500);
+  if (_apiKey && _apiKey.startsWith('sk-ant')) {
+    // Clé déjà chargée depuis Firestore/localStorage
+    bar.style.display = 'none';
+    if (input) { input.value = _apiKey; input.classList.add('valid'); }
+    const btn = document.getElementById('apiKeyBtn');
+    if (btn) btn.classList.add('configured');
+    if (status) { status.innerHTML = '<span class="status-dot"></span> Prêt'; status.style.color = 'var(--accent2)'; }
+  } else {
+    bar.style.display = 'block';
+    if (status) { status.innerHTML = '<span class="status-dot" style="background:var(--accent3)"></span> Entrer ta clé 🔑'; status.style.color = 'var(--accent3)'; }
+    setTimeout(() => { if (input) input.focus(); }, 500);
+  }
 }
 
 // ===== TOAST =====
@@ -5112,6 +5126,7 @@ async function loadUserData(uid) {
       if (d.custom_filters) customFilters   = d.custom_filters;
       if (d.day_types)      dayTypes        = d.day_types;
       if (d.settings)       Object.assign(uiSettings, d.settings);
+      if (d.api_key)        _apiKey = d.api_key;
       // Mise en cache localStorage
       _syncToLocalStorage();
     }
@@ -5157,6 +5172,8 @@ function _loadFromLocalStorage() {
     if (cf) customFilters   = JSON.parse(cf);
     if (dt) dayTypes        = JSON.parse(dt);
     if (s)  Object.assign(uiSettings, JSON.parse(s));
+    const k = localStorage.getItem('nutriai_api_key');
+    if (k)  _apiKey = k;
     return true;
   } catch(e) { return false; }
 }
