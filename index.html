@@ -1545,11 +1545,111 @@
     margin-left: 16px;
   }
 
+  /* Mobile components — hidden on desktop */
+  .mobile-bottom-nav { display: none; }
+  .chat-mobile-toggle { display: none; }
+  .chat-mobile-overlay { display: none; }
+
   @media (max-width: 900px) {
-    .app { grid-template-columns: 1fr; grid-template-rows: auto; }
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr;
+      height: 100vh;
+      overflow: hidden;
+    }
     .sidebar { display: none; }
-    .chat-panel { height: 60vh; }
+    .main { padding-bottom: 80px; }
     .macros-grid { grid-template-columns: 1fr; }
+
+    /* Chat panel as right-side drawer */
+    .chat-panel {
+      position: fixed;
+      top: 0; right: 0;
+      width: 88vw;
+      max-width: 380px;
+      height: 100vh;
+      z-index: 200;
+      transform: translateX(100%);
+      transition: transform 0.35s cubic-bezier(.4,0,.2,1);
+      box-shadow: -8px 0 40px #00000070;
+    }
+    .chat-panel.mobile-open {
+      transform: translateX(0);
+    }
+
+    /* Overlay behind chat drawer */
+    .chat-mobile-overlay {
+      display: block;
+      position: fixed;
+      inset: 0;
+      background: #00000070;
+      backdrop-filter: blur(2px);
+      z-index: 199;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.35s;
+    }
+    .chat-mobile-overlay.visible {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    /* Floating chat toggle tab on the right edge */
+    .chat-mobile-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: fixed;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 36px;
+      height: 64px;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-right: none;
+      border-radius: 12px 0 0 12px;
+      cursor: pointer;
+      z-index: 198;
+      font-size: 20px;
+      box-shadow: -4px 0 20px #00000050;
+      color: var(--accent);
+      transition: background 0.2s, width 0.2s;
+    }
+    .chat-mobile-toggle:hover { background: var(--surface2); width: 42px; }
+
+    /* Mobile bottom navigation bar */
+    .mobile-bottom-nav {
+      display: flex;
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: var(--surface);
+      border-top: 1px solid var(--border2);
+      z-index: 100;
+      padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+      height: 68px;
+    }
+    .mobile-nav-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 10px;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      transition: color 0.2s;
+      padding: 4px 4px;
+    }
+    .mobile-nav-item .mn-icon { font-size: 20px; line-height: 1; }
+    .mobile-nav-item:hover { color: var(--text); }
+    .mobile-nav-item.active { color: var(--accent); }
   }
 
   /* ===== FAVORITES ===== */
@@ -2275,6 +2375,25 @@
     <button class="nav-item" title="Réinitialiser" onclick="resetApp()">🗑️</button>
   </nav>
 
+  <!-- MOBILE BOTTOM NAV -->
+  <nav class="mobile-bottom-nav" id="mobileBottomNav">
+    <button class="mobile-nav-item active" id="mnav-dashboard" onclick="showView('dashboard')">
+      <span class="mn-icon">📊</span><span>Dashboard</span>
+    </button>
+    <button class="mobile-nav-item" id="mnav-recipes" onclick="showView('recipes')">
+      <span class="mn-icon">🍳</span><span>Recettes</span>
+    </button>
+    <button class="mobile-nav-item" id="mnav-history" onclick="showView('history')">
+      <span class="mn-icon">📅</span><span>Historique</span>
+    </button>
+    <button class="mobile-nav-item" id="mnav-profile" onclick="showView('profile')">
+      <span class="mn-icon">👤</span><span>Profil</span>
+    </button>
+    <button class="mobile-nav-item" onclick="openSettings()">
+      <span class="mn-icon">⚙️</span><span>Réglages</span>
+    </button>
+  </nav>
+
   <!-- MAIN CONTENT -->
   <main class="main" id="mainContent">
 
@@ -2485,6 +2604,10 @@
     <div class="history-summary" id="historySummary"></div>
   </main>
 
+
+  <!-- MOBILE CHAT TOGGLE -->
+  <button class="chat-mobile-toggle" id="chatMobileToggle" onclick="toggleMobileChat()" title="Ouvrir NutriAI">🧠</button>
+  <div class="chat-mobile-overlay" id="chatMobileOverlay" onclick="toggleMobileChat()"></div>
 
   <aside class="chat-panel" id="chatPanel">
     <div class="drag-overlay" id="dragOverlay">
@@ -3718,9 +3841,24 @@ function showView(view) {
   document.querySelectorAll('.nav-item[id^=nav-]').forEach(b => b.classList.remove('active'));
   const btn = document.getElementById('nav-' + view);
   if (btn) btn.classList.add('active');
+  // Sync mobile bottom nav
+  document.querySelectorAll('.mobile-nav-item[id^=mnav-]').forEach(b => b.classList.remove('active'));
+  const mbtn = document.getElementById('mnav-' + view);
+  if (mbtn) mbtn.classList.add('active');
   if (view === 'recipes') renderRecipes();
   if (view === 'profile') loadProfileForm();
   if (view === 'history') renderHistory();
+}
+
+// ===== MOBILE CHAT TOGGLE =====
+function toggleMobileChat() {
+  const panel = document.getElementById('chatPanel');
+  const overlay = document.getElementById('chatMobileOverlay');
+  const toggle = document.getElementById('chatMobileToggle');
+  const isOpen = panel.classList.contains('mobile-open');
+  panel.classList.toggle('mobile-open', !isOpen);
+  overlay.classList.toggle('visible', !isOpen);
+  toggle.textContent = isOpen ? '🧠' : '✕';
 }
 
 // ===== PROFILE MANAGEMENT =====
