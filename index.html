@@ -5083,6 +5083,10 @@ function renderHistory() {
 
 // ===== FIREBASE AUTH & FIRESTORE =====
 
+function _isMobile() {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
 async function signInWithGoogle() {
   const btn    = document.getElementById('btnGoogleSignIn');
   const status = document.getElementById('loginStatus');
@@ -5090,8 +5094,13 @@ async function signInWithGoogle() {
   status.style.display = 'block';
   status.textContent = 'Connexion en cours…';
   try {
-    await auth.signInWithPopup(googleProvider);
-    // onAuthStateChanged prend le relais
+    if (_isMobile()) {
+      // Sur mobile : redirect (plus fiable que popup)
+      await auth.signInWithRedirect(googleProvider);
+    } else {
+      // Sur desktop : popup
+      await auth.signInWithPopup(googleProvider);
+    }
   } catch(err) {
     console.error('Google sign-in error:', err);
     status.textContent = 'Erreur de connexion. Réessaie.';
@@ -5226,6 +5235,15 @@ function saveCustomRecipes() {
   try { localStorage.setItem('nutriai_custom_recipes', JSON.stringify(customRecipes)); } catch(e) {}
   saveToFirestore();
 }
+
+// Gestion du retour après signInWithRedirect (mobile)
+auth.getRedirectResult().catch(err => {
+  console.error('Redirect result error:', err);
+  const status = document.getElementById('loginStatus');
+  if (status) { status.style.display = 'block'; status.textContent = 'Erreur de connexion. Réessaie.'; }
+  const btn = document.getElementById('btnGoogleSignIn');
+  if (btn) btn.disabled = false;
+});
 
 // ===== AUTH STATE MACHINE =====
 auth.onAuthStateChanged(async (user) => {
