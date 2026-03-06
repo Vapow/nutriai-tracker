@@ -5083,10 +5083,6 @@ function renderHistory() {
 
 // ===== FIREBASE AUTH & FIRESTORE =====
 
-function _isMobile() {
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-}
-
 async function signInWithGoogle() {
   const btn    = document.getElementById('btnGoogleSignIn');
   const status = document.getElementById('loginStatus');
@@ -5094,17 +5090,23 @@ async function signInWithGoogle() {
   status.style.display = 'block';
   status.textContent = 'Connexion en cours…';
   try {
-    if (_isMobile()) {
-      // Sur mobile : redirect (plus fiable que popup)
-      await auth.signInWithRedirect(googleProvider);
-    } else {
-      // Sur desktop : popup
-      await auth.signInWithPopup(googleProvider);
-    }
+    await auth.signInWithPopup(googleProvider);
+    // onAuthStateChanged prend le relais
   } catch(err) {
-    console.error('Google sign-in error:', err);
-    status.textContent = 'Erreur de connexion. Réessaie.';
-    btn.disabled = false;
+    if (err.code === 'auth/popup-blocked') {
+      // Popup bloquée : fallback redirect
+      status.textContent = 'Popup bloquée, redirection en cours…';
+      try {
+        await auth.signInWithRedirect(googleProvider);
+      } catch(err2) {
+        status.textContent = 'Erreur de connexion. Autorise les popups et réessaie.';
+        btn.disabled = false;
+      }
+    } else {
+      console.error('Google sign-in error:', err);
+      status.textContent = 'Erreur de connexion. Réessaie.';
+      btn.disabled = false;
+    }
   }
 }
 
