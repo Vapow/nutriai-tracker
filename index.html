@@ -15,6 +15,37 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- Firebase Compat SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+// ===== FIREBASE CONFIG — Remplace les valeurs après avoir créé ton projet =====
+const firebaseConfig = {
+  apiKey:            "VOTRE_API_KEY",
+  authDomain:        "VOTRE_PROJECT_ID.firebaseapp.com",
+  projectId:         "VOTRE_PROJECT_ID",
+  storageBucket:     "VOTRE_PROJECT_ID.appspot.com",
+  messagingSenderId: "VOTRE_SENDER_ID",
+  appId:             "VOTRE_APP_ID"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db   = firebase.firestore();
+
+// Cache offline Firestore (IndexedDB)
+db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+  if (err.code !== 'failed-precondition' && err.code !== 'unimplemented')
+    console.warn('Firestore persistence:', err);
+});
+
+// Google provider — affiche toujours le sélecteur de compte
+const googleProvider = new firebase.auth.GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+let currentUser = null;           // Firebase user courant
+let _firestoreDebounceTimer = null; // handle pour le debounce d'écriture
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -1545,6 +1576,57 @@
     margin-left: 16px;
   }
 
+  /* ======= LOGIN SCREEN ======= */
+  .login-screen {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .login-card {
+    width: 420px; max-width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 28px;
+    padding: 48px 40px;
+    display: flex; flex-direction: column;
+    align-items: center; gap: 32px;
+    animation: modalIn 0.35s cubic-bezier(.4,0,.2,1);
+  }
+  .login-logo { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .login-brand { font-family: 'Syne', sans-serif; font-size: 32px; font-weight: 800; color: var(--accent); }
+  .login-tagline { font-size: 13px; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .login-body { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  .btn-google {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    width: 100%; padding: 14px 24px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 14px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 500;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .btn-google:hover { border-color: var(--accent); background: #c8f54212; }
+  .btn-google:disabled { opacity: 0.5; cursor: not-allowed; }
+  .login-disclaimer { font-size: 12px; color: var(--muted2); text-align: center; line-height: 1.5; max-width: 280px; }
+  .login-status { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); text-align: center; margin-top: -12px; }
+
+  /* ======= SIDEBAR USER AVATAR ======= */
+  .sidebar-user {
+    width: 36px; height: 36px;
+    border-radius: 50%; overflow: hidden;
+    border: 2px solid var(--accent);
+    cursor: pointer; flex-shrink: 0;
+    margin-bottom: 4px;
+    transition: border-color 0.2s;
+  }
+  .sidebar-user:hover { border-color: var(--accent2); }
+  .sidebar-avatar { width: 100%; height: 100%; object-fit: cover; }
+
   /* Mobile components — hidden on desktop */
   .mobile-bottom-nav { display: none; }
   .chat-mobile-toggle { display: none; }
@@ -2235,6 +2317,30 @@
 </head>
 <body>
 
+<!-- LOGIN SCREEN -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="logo-icon" style="width:52px;height:52px;font-size:26px;border-radius:14px;">🥗</div>
+      <div class="login-brand">NutriAI</div>
+      <div class="login-tagline">Ton tracker macros intelligent</div>
+    </div>
+    <div class="login-body">
+      <button class="btn-google" id="btnGoogleSignIn" onclick="signInWithGoogle()">
+        <svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+          <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.8 2.5 30.2 0 24 0 14.8 0 6.9 5.4 3 13.3l7.8 6c1.8-5.4 6.8-9.8 13.2-9.8z"/>
+          <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 6.9-10 6.9-17z"/>
+          <path fill="#FBBC05" d="M10.8 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7L2.5 13.3A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.5 10.7l8.3-6z"/>
+          <path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2 1.4-4.6 2.2-7.7 2.2-6.4 0-11.8-4.3-13.7-10.1l-8 6.2C6.9 42.6 14.8 48 24 48z"/>
+        </svg>
+        Continuer avec Google
+      </button>
+      <div class="login-disclaimer">Tes données sont sauvegardées dans le cloud et accessibles sur tous tes appareils.</div>
+    </div>
+    <div class="login-status" id="loginStatus" style="display:none;"></div>
+  </div>
+</div>
+
 <!-- SETUP SCREEN -->
 <div class="setup-screen" id="setupScreen">
   <div class="setup-card">
@@ -2366,12 +2472,17 @@
       <div class="logo-icon">🥗</div>
       <div class="logo-text">Nutri</div>
     </div>
+    <!-- Avatar utilisateur connecté -->
+    <div class="sidebar-user" id="sidebarUser" style="display:none;" title="Mon compte">
+      <img class="sidebar-avatar" id="sidebarAvatar" src="" alt="Avatar" />
+    </div>
     <button class="nav-item active" id="nav-dashboard" title="Dashboard" onclick="showView('dashboard')">📊</button>
     <button class="nav-item" id="nav-recipes" title="Recettes" onclick="showView('recipes')">🍳</button>
     <button class="nav-item" id="nav-history" title="Historique" onclick="showView('history')">📅</button>
     <button class="nav-item" id="nav-profile" title="Profil" onclick="showView('profile')">👤</button>
     <div class="nav-spacer"></div>
     <button class="nav-item" title="Paramètres" onclick="openSettings()">⚙️</button>
+    <button class="nav-item" id="btnLogout" title="Se déconnecter" onclick="signOutUser()" style="display:none;">🚪</button>
     <button class="nav-item" title="Réinitialiser" onclick="resetApp()">🗑️</button>
   </nav>
 
@@ -3035,6 +3146,7 @@ function finishSetup() {
   };
   localStorage.setItem('nutriai_profile', JSON.stringify(profile));
   localStorage.setItem('nutriai_goals', JSON.stringify(goals));
+  saveToFirestore();
   document.getElementById('setupScreen').style.display = 'none';
   document.getElementById('mainApp').style.display = 'grid';
   applyAllSettings();
@@ -3042,9 +3154,11 @@ function finishSetup() {
 }
 
 function resetApp() {
-  if (confirm('Réinitialiser l\u2019application ?')) {
-    localStorage.clear();
-    location.reload();
+  if (confirm('Réinitialiser l\u2019application ? Tu seras déconnecté(e).')) {
+    auth.signOut().finally(() => {
+      localStorage.clear();
+      location.reload();
+    });
   }
 }
 
@@ -3884,6 +3998,9 @@ function saveProfile() {
   goals.prot = parseInt(document.getElementById('profileProt').value) || goals.prot;
   goals.carb = parseInt(document.getElementById('profileCarb').value) || goals.carb;
   goals.fat = parseInt(document.getElementById('profileFat').value) || goals.fat;
+  localStorage.setItem('nutriai_profile', JSON.stringify(profile));
+  localStorage.setItem('nutriai_goals', JSON.stringify(goals));
+  saveToFirestore();
   showToast('✅ Profil sauvegardé !');
   updateHeader();
   updateStats();
@@ -4128,7 +4245,7 @@ const RECIPE_FILTERS = [
 ];
 
 // User-created custom filters, persisted
-let customFilters = JSON.parse(localStorage.getItem('nutriai_custom_filters') || '[]');
+let customFilters = []; // initialisé par loadUserData() / _loadFromLocalStorage()
 
 let activeFilter = 'all';
 
@@ -4140,6 +4257,7 @@ function toggleFavorite(recipeId, e) {
     favoriteRecipes.add(recipeId);
   }
   localStorage.setItem('nutriai_favorites', JSON.stringify([...favoriteRecipes]));
+  saveToFirestore();
   renderRecipes();
   // Update modal button if open
   const favBtn = document.getElementById('rmFavBtn');
@@ -4209,6 +4327,7 @@ function confirmAddFilter() {
   if (!customFilters.includes(val) && !RECIPE_FILTERS.some(f => f.value === val)) {
     customFilters.push(val);
     localStorage.setItem('nutriai_custom_filters', JSON.stringify(customFilters));
+    saveToFirestore();
     showToast(`✅ Filtre "${val}" ajouté`);
   }
   activeFilter = val;
@@ -4219,6 +4338,7 @@ function deleteCustomFilter(val, e) {
   e.stopPropagation();
   customFilters = customFilters.filter(f => f !== val);
   localStorage.setItem('nutriai_custom_filters', JSON.stringify(customFilters));
+  saveToFirestore();
   if (activeFilter === val) activeFilter = 'all';
   renderRecipes();
   showToast(`🗑️ Filtre "${val}" supprimé`);
@@ -4508,7 +4628,7 @@ function saveWebRecipe() {
 }
 
 // ===== DAY TYPE (repos / entraînement) =====
-let dayTypes = JSON.parse(localStorage.getItem('nutriai_day_types') || '{}');
+let dayTypes = {}; // initialisé par loadUserData() / _loadFromLocalStorage()
 
 function setDayType(type) {
   const key = getDateKey(dayOffset);
@@ -4518,6 +4638,7 @@ function setDayType(type) {
     dayTypes[key] = type;
   }
   localStorage.setItem('nutriai_day_types', JSON.stringify(dayTypes));
+  saveToFirestore();
   renderDayType();
 }
 
@@ -4806,6 +4927,7 @@ function toggleChatPanel(show) {
 
 function saveSettings() {
   localStorage.setItem('nutriai_settings', JSON.stringify(uiSettings));
+  saveToFirestore();
   showToast('✅ Paramètres sauvegardés !');
 }
 
@@ -4944,60 +5066,191 @@ function renderHistory() {
   });
 }
 
+// ===== FIREBASE AUTH & FIRESTORE =====
+
+async function signInWithGoogle() {
+  const btn    = document.getElementById('btnGoogleSignIn');
+  const status = document.getElementById('loginStatus');
+  btn.disabled = true;
+  status.style.display = 'block';
+  status.textContent = 'Connexion en cours…';
+  try {
+    await auth.signInWithPopup(googleProvider);
+    // onAuthStateChanged prend le relais
+  } catch(err) {
+    console.error('Google sign-in error:', err);
+    status.textContent = 'Erreur de connexion. Réessaie.';
+    btn.disabled = false;
+  }
+}
+
+async function signOutUser() {
+  if (!confirm('Se déconnecter ?')) return;
+  await auth.signOut();
+  // Réinitialise l'état en mémoire
+  profile = {};
+  goals = { cals: 2000, prot: 150, carb: 200, fat: 65 };
+  meals = {}; water = {};
+  favoriteRecipes = new Set();
+  customRecipes = []; customFilters = []; dayTypes = {};
+  uiSettings = { darkMode: true, fontSize: 14, fontFamily: "'DM Sans', sans-serif", fontWeight: '400', waterGoalL: 2.5, waterGlassMl: 250, showChat: true };
+  currentUser = null;
+}
+
+async function loadUserData(uid) {
+  try {
+    const doc = await db.collection('users').doc(uid).get();
+    if (doc.exists) {
+      const d = doc.data();
+      if (d.profile)        profile         = d.profile;
+      if (d.goals)          goals           = d.goals;
+      if (d.meals)          meals           = d.meals;
+      if (d.water)          water           = d.water;
+      if (d.favorites)      favoriteRecipes = new Set(d.favorites);
+      if (d.custom_recipes) customRecipes   = d.custom_recipes;
+      if (d.custom_filters) customFilters   = d.custom_filters;
+      if (d.day_types)      dayTypes        = d.day_types;
+      if (d.settings)       Object.assign(uiSettings, d.settings);
+      // Mise en cache localStorage
+      _syncToLocalStorage();
+    }
+    return doc.exists;
+  } catch(err) {
+    console.warn('Firestore indisponible, chargement depuis localStorage:', err);
+    return _loadFromLocalStorage();
+  }
+}
+
+function _syncToLocalStorage() {
+  try {
+    localStorage.setItem('nutriai_profile',        JSON.stringify(profile));
+    localStorage.setItem('nutriai_goals',          JSON.stringify(goals));
+    localStorage.setItem('nutriai_meals',          JSON.stringify(meals));
+    localStorage.setItem('nutriai_water',          JSON.stringify(water));
+    localStorage.setItem('nutriai_favorites',      JSON.stringify([...favoriteRecipes]));
+    localStorage.setItem('nutriai_custom_recipes', JSON.stringify(customRecipes));
+    localStorage.setItem('nutriai_custom_filters', JSON.stringify(customFilters));
+    localStorage.setItem('nutriai_day_types',      JSON.stringify(dayTypes));
+    localStorage.setItem('nutriai_settings',       JSON.stringify(uiSettings));
+  } catch(e) {}
+}
+
+function _loadFromLocalStorage() {
+  const savedProfile = localStorage.getItem('nutriai_profile');
+  const savedGoals   = localStorage.getItem('nutriai_goals');
+  if (!savedProfile || !savedGoals) return false;
+  try {
+    profile = JSON.parse(savedProfile);
+    goals   = JSON.parse(savedGoals);
+    const m = localStorage.getItem('nutriai_meals');
+    const w = localStorage.getItem('nutriai_water');
+    const f = localStorage.getItem('nutriai_favorites');
+    const c = localStorage.getItem('nutriai_custom_recipes');
+    const cf = localStorage.getItem('nutriai_custom_filters');
+    const dt = localStorage.getItem('nutriai_day_types');
+    const s  = localStorage.getItem('nutriai_settings');
+    if (m)  meals           = JSON.parse(m);
+    if (w)  water           = JSON.parse(w);
+    if (f)  favoriteRecipes = new Set(JSON.parse(f));
+    if (c)  customRecipes   = JSON.parse(c);
+    if (cf) customFilters   = JSON.parse(cf);
+    if (dt) dayTypes        = JSON.parse(dt);
+    if (s)  Object.assign(uiSettings, JSON.parse(s));
+    return true;
+  } catch(e) { return false; }
+}
+
+function saveToFirestore() {
+  if (!currentUser) return;
+  clearTimeout(_firestoreDebounceTimer);
+  _firestoreDebounceTimer = setTimeout(() => {
+    const payload = {
+      profile, goals, meals, water,
+      favorites:      [...favoriteRecipes],
+      custom_recipes: customRecipes,
+      custom_filters: customFilters,
+      day_types:      dayTypes,
+      settings:       uiSettings,
+      lastUpdated:    firebase.firestore.FieldValue.serverTimestamp(),
+    };
+    db.collection('users').doc(currentUser.uid).set(payload)
+      .catch(err => console.warn('Firestore write (sera réessayé en ligne):', err));
+  }, 1000);
+}
+
+function updateSidebarUser(user) {
+  const avatarWrap = document.getElementById('sidebarUser');
+  const avatarImg  = document.getElementById('sidebarAvatar');
+  const logoutBtn  = document.getElementById('btnLogout');
+  if (user) {
+    avatarImg.src = user.photoURL || '';
+    avatarImg.alt = user.displayName || 'Avatar';
+    avatarWrap.style.display = 'block';
+    logoutBtn.style.display  = 'flex';
+  } else {
+    avatarWrap.style.display = 'none';
+    logoutBtn.style.display  = 'none';
+  }
+}
+
 // ===== BOOT =====
 function saveMeals() {
   try { localStorage.setItem('nutriai_meals', JSON.stringify(meals)); } catch(e) {}
+  saveToFirestore();
 }
 
 function saveWater() {
   try { localStorage.setItem('nutriai_water', JSON.stringify(water)); } catch(e) {}
+  saveToFirestore();
 }
 
 function saveCustomRecipes() {
   try { localStorage.setItem('nutriai_custom_recipes', JSON.stringify(customRecipes)); } catch(e) {}
+  saveToFirestore();
 }
 
+// ===== AUTH STATE MACHINE =====
+auth.onAuthStateChanged(async (user) => {
+  if (user) {
+    currentUser = user;
+    updateSidebarUser(user);
+
+    const loginStatus = document.getElementById('loginStatus');
+    loginStatus.style.display = 'block';
+    loginStatus.textContent = 'Chargement de tes données…';
+
+    const hasData = await loadUserData(user.uid);
+
+    // Restaure le compteur de recettes custom
+    customRecipes.forEach(r => { if (r.id >= _webRecipeIdCounter) _webRecipeIdCounter = r.id + 1; });
+
+    applyAllSettings();
+    document.getElementById('loginScreen').style.display = 'none';
+
+    if (hasData) {
+      document.getElementById('setupScreen').style.display = 'none';
+      document.getElementById('mainApp').style.display = 'grid';
+      initApp();
+    } else {
+      document.getElementById('setupScreen').style.display = 'flex';
+      document.getElementById('mainApp').style.display = 'none';
+    }
+  } else {
+    currentUser = null;
+    updateSidebarUser(null);
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('setupScreen').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'none';
+  }
+});
+
+// Chargement initial : uniquement les réglages visuels (avant auth)
 window.addEventListener('load', () => {
-  // Load saved favorites
-  const savedFavs = localStorage.getItem('nutriai_favorites');
-  if (savedFavs) {
-    try { favoriteRecipes = new Set(JSON.parse(savedFavs)); } catch(e) {}
-  }
-
-  // Load custom (web-found) recipes
-  const savedCustom = localStorage.getItem('nutriai_custom_recipes');
-  if (savedCustom) {
-    try {
-      customRecipes = JSON.parse(savedCustom);
-      // Restore counter above highest saved id
-      customRecipes.forEach(r => { if (r.id >= _webRecipeIdCounter) _webRecipeIdCounter = r.id + 1; });
-    } catch(e) {}
-  }
-
-  // Load saved settings
   const savedSettings = localStorage.getItem('nutriai_settings');
   if (savedSettings) {
     try { Object.assign(uiSettings, JSON.parse(savedSettings)); } catch(e) {}
   }
   applyAllSettings();
-
-  const savedProfile = localStorage.getItem('nutriai_profile');
-  const savedGoals = localStorage.getItem('nutriai_goals');
-  if (savedProfile && savedGoals) {
-    profile = JSON.parse(savedProfile);
-    goals = JSON.parse(savedGoals);
-
-    // ← Chargement des repas et de l'eau
-    const savedMeals = localStorage.getItem('nutriai_meals');
-    const savedWater = localStorage.getItem('nutriai_water');
-    if (savedMeals)  { try { meals = JSON.parse(savedMeals);  } catch(e) {} }
-    if (savedWater)  { try { water = JSON.parse(savedWater);  } catch(e) {} }
-
-    document.getElementById('setupScreen').style.display = 'none';
-    document.getElementById('mainApp').style.display = 'grid';
-    initApp();
-  }
-  // Default goal selection
   selectGoal('maintain');
 });
 
