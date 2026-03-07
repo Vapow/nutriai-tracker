@@ -3045,6 +3045,23 @@ let _firestoreDebounceTimer = null; // handle pour le debounce d'écriture
 
     <button class="btn-primary" onclick="saveSettings();closeSettings()">💾 Sauvegarder</button>
   </div>
+
+  <!-- Compte -->
+  <div id="settingsAccountSection" style="display:none; border-top:1px solid var(--border2); padding-top:20px;">
+    <div class="settings-section-title">Compte</div>
+    <div id="settingsUserInfo" style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:12px;background:var(--surface2);border:1px solid var(--border2);border-radius:12px;">
+      <img id="settingsAvatar" src="" alt="Avatar" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid var(--accent);" />
+      <div>
+        <div id="settingsUserName" style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;"></div>
+        <div id="settingsUserEmail" style="font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;"></div>
+      </div>
+    </div>
+    <button class="btn-ghost" onclick="signOutUser();closeSettings();" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;">
+      🚪 Se déconnecter
+    </button>
+  </div>
+
+</div>
 </div>
 
 <!-- TOAST -->
@@ -5208,17 +5225,30 @@ function saveToFirestore() {
 }
 
 function updateSidebarUser(user) {
-  const avatarWrap = document.getElementById('sidebarUser');
-  const avatarImg  = document.getElementById('sidebarAvatar');
-  const logoutBtn  = document.getElementById('btnLogout');
+  const avatarWrap    = document.getElementById('sidebarUser');
+  const avatarImg     = document.getElementById('sidebarAvatar');
+  const logoutBtn     = document.getElementById('btnLogout');
+  const accountSection = document.getElementById('settingsAccountSection');
   if (user) {
+    // Sidebar
     avatarImg.src = user.photoURL || '';
     avatarImg.alt = user.displayName || 'Avatar';
     avatarWrap.style.display = 'block';
     logoutBtn.style.display  = 'flex';
+    // Section compte dans Paramètres
+    if (accountSection) {
+      accountSection.style.display = 'block';
+      const sAvatar = document.getElementById('settingsAvatar');
+      const sName   = document.getElementById('settingsUserName');
+      const sEmail  = document.getElementById('settingsUserEmail');
+      if (sAvatar) sAvatar.src = user.photoURL || '';
+      if (sName)   sName.textContent  = user.displayName || 'Utilisateur';
+      if (sEmail)  sEmail.textContent = user.email || '';
+    }
   } else {
     avatarWrap.style.display = 'none';
     logoutBtn.style.display  = 'none';
+    if (accountSection) accountSection.style.display = 'none';
   }
 }
 
