@@ -560,11 +560,81 @@ let _firestoreDebounceTimer = null; // handle pour le debounce d'écriture
 
   .meal-del {
     background: none; border: none; cursor: pointer;
-    color: var(--muted2); font-size: 16px; margin-left: 12px;
+    color: var(--muted2); font-size: 16px; margin-left: 4px;
     transition: color 0.2s;
     width: 24px; display: flex; align-items: center; justify-content: center;
   }
   .meal-del:hover { color: #ff6b6b; }
+
+  .meal-copy {
+    background: none; border: none; cursor: pointer;
+    color: var(--muted2); font-size: 14px; margin-left: 4px;
+    transition: color 0.2s;
+    width: 22px; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .meal-copy:hover { color: var(--accent); }
+
+  .meal-section-copy {
+    background: none; border: none; cursor: pointer;
+    color: var(--muted2); font-size: 13px;
+    transition: color 0.2s;
+    padding: 2px 5px; border-radius: 4px;
+    line-height: 1;
+  }
+  .meal-section-copy:hover { color: var(--accent); }
+
+  /* CLIPBOARD BAR */
+  .clipboard-bar {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 16px;
+    background: var(--surface2);
+    border: 1px solid var(--accent);
+    border-radius: 14px;
+    margin-bottom: 14px;
+    gap: 12px;
+  }
+  .clipboard-bar.active { display: flex; }
+  .clipboard-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--text);
+    min-width: 0;
+  }
+  .clipboard-info span:last-child {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .clipboard-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .clipboard-paste-btn {
+    background: var(--accent); color: #000;
+    border: none; border-radius: 8px;
+    padding: 6px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: opacity 0.2s;
+  }
+  .clipboard-paste-btn:hover { opacity: 0.85; }
+  .clipboard-clear-btn {
+    background: none; border: 1px solid var(--border2);
+    color: var(--muted); border-radius: 8px;
+    padding: 6px 10px; font-size: 13px;
+    cursor: pointer; transition: color 0.2s;
+  }
+  .clipboard-clear-btn:hover { color: var(--text); }
+
+  .copy-day-btn {
+    background: none; border: 1px solid var(--border2);
+    color: var(--muted); border-radius: 8px;
+    padding: 5px 10px; font-size: 12px;
+    cursor: pointer; transition: all 0.2s;
+    font-family: 'DM Sans', sans-serif;
+    white-space: nowrap;
+  }
+  .copy-day-btn:hover { border-color: var(--accent); color: var(--accent); }
 
   .meal-add-btn {
     display: flex;
@@ -2519,6 +2589,7 @@ let _firestoreDebounceTimer = null; // handle pour le debounce d'écriture
         <button onclick="changeDay(-1)">◀</button>
         <div class="date-label" id="dateLabelNav">Aujourd'hui</div>
         <button onclick="changeDay(1)">▶</button>
+        <button class="copy-day-btn" onclick="copyDay()" title="Copier le jour entier">📋 Jour</button>
       </div>
     </div>
 
@@ -2604,6 +2675,16 @@ let _firestoreDebounceTimer = null; // handle pour le debounce d'écriture
       <div class="section-header">
         <div class="section-title">Repas du jour</div>
         <button class="btn-add" onclick="openAddFood()">+ Ajouter</button>
+      </div>
+      <div class="clipboard-bar" id="clipboardBar">
+        <div class="clipboard-info">
+          <span>📋</span>
+          <span id="clipboardLabel">—</span>
+        </div>
+        <div class="clipboard-actions">
+          <button class="clipboard-paste-btn" onclick="pasteToCurrentDay()">Coller ici</button>
+          <button class="clipboard-clear-btn" onclick="clearClipboard()">✕ Effacer</button>
+        </div>
       </div>
       <div class="meals-list" id="mealsList"></div>
     </div>
@@ -3316,13 +3397,17 @@ function renderMealsList() {
           <div class="meal-macro c"><span>${item.carb}g</span> C</div>
           <div class="meal-macro f"><span>${item.fat}g</span> L</div>
         </div>
+        <button class="meal-copy" onclick="copyFoodItem(${items.indexOf(item)})" title="Copier cet aliment">⧉</button>
         <button class="meal-del" onclick="removeFood('${type}', ${items.indexOf(item)})">×</button>
       </div>`).join('');
 
     group.innerHTML = `
       <div class="meal-group-header" onclick="openAddFoodMeal('${type}')">
         <div class="meal-group-name">${type}</div>
-        <div class="meal-group-cals">${typeCals > 0 ? typeCals + ' kcal' : '+ Ajouter'}</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="meal-group-cals">${typeCals > 0 ? typeCals + ' kcal' : '+ Ajouter'}</div>
+          ${typeItems.length > 0 ? `<button class="meal-section-copy" onclick="event.stopPropagation();copyMealSection('${type}')" title="Copier la section">⧉</button>` : ''}
+        </div>
       </div>
       ${itemsHTML}
       <button class="meal-add-btn" onclick="openAddFoodMeal('${type}')">＋ Ajouter un aliment</button>
@@ -3338,6 +3423,68 @@ function removeFood(meal, idx) {
   saveMeals();
   updateStats();
   renderMealsList();
+}
+
+// ===== CLIPBOARD COPIER/COLLER =====
+let clipboard = null;
+
+function copyFoodItem(globalIdx) {
+  const items = getTodayMeals();
+  const item = items[globalIdx];
+  if (!item) return;
+  clipboard = { data: [{ ...item }], label: `"${item.name}"` };
+  renderClipboardBar();
+  showToast('📋 Aliment copié !');
+}
+
+function copyMealSection(type) {
+  const items = getTodayMeals().filter(i => i.meal === type);
+  if (!items.length) { showToast('⚠️ Section vide'); return; }
+  clipboard = {
+    data: items.map(i => ({ ...i })),
+    label: `${type} — ${items.length} aliment${items.length > 1 ? 's' : ''}`
+  };
+  renderClipboardBar();
+  showToast(`📋 ${type} copié !`);
+}
+
+function copyDay() {
+  const items = getTodayMeals();
+  if (!items.length) { showToast('⚠️ Journée vide'); return; }
+  clipboard = {
+    data: items.map(i => ({ ...i })),
+    label: `Journée entière — ${items.length} aliment${items.length > 1 ? 's' : ''}`
+  };
+  renderClipboardBar();
+  showToast('📋 Journée copiée !');
+}
+
+function pasteToCurrentDay() {
+  if (!clipboard) return;
+  const key = getDateKey(dayOffset);
+  if (!meals[key]) meals[key] = [];
+  clipboard.data.forEach(item => meals[key].push({ ...item }));
+  saveMeals();
+  updateStats();
+  renderMealsList();
+  const n = clipboard.data.length;
+  showToast(`✅ ${n} aliment${n > 1 ? 's' : ''} collé${n > 1 ? 's' : ''} !`);
+}
+
+function clearClipboard() {
+  clipboard = null;
+  renderClipboardBar();
+}
+
+function renderClipboardBar() {
+  const bar = document.getElementById('clipboardBar');
+  const label = document.getElementById('clipboardLabel');
+  if (clipboard) {
+    bar.classList.add('active');
+    label.textContent = clipboard.label;
+  } else {
+    bar.classList.remove('active');
+  }
 }
 
 // ===== ADD FOOD MODAL =====
