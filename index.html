@@ -280,7 +280,7 @@ let _firestoreDebounceTimer = null; // handle pour le debounce d'écriture
     inset: 0;
     background: rgba(0,0,0,.65);
     backdrop-filter: blur(4px);
-    z-index: 300;
+    z-index: 700;
     align-items: center;
     justify-content: center;
   }
@@ -635,6 +635,16 @@ let _firestoreDebounceTimer = null; // handle pour le debounce d'écriture
     white-space: nowrap;
   }
   .copy-day-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .today-btn {
+    background: none; border: 1px solid var(--border2);
+    color: var(--accent); border-radius: 8px;
+    padding: 4px 10px; font-size: 12px;
+    cursor: pointer; transition: all 0.2s;
+    font-family: 'DM Mono', monospace;
+    white-space: nowrap;
+  }
+  .today-btn:hover { background: var(--accent); color: #000; border-color: var(--accent); }
 
   .meal-add-btn {
     display: flex;
@@ -2589,7 +2599,7 @@ let _firestoreDebounceTimer = null; // handle pour le debounce d'écriture
         <button onclick="changeDay(-1)">◀</button>
         <div class="date-label" id="dateLabelNav">Aujourd'hui</div>
         <button onclick="changeDay(1)">▶</button>
-        <button class="copy-day-btn" onclick="copyDay()" title="Copier le jour entier">📋 Jour</button>
+        <button class="today-btn" id="todayBtn" onclick="goToToday()" title="Revenir au jour actuel" style="display:none;">⟳ Auj.</button>
       </div>
     </div>
 
@@ -2674,7 +2684,10 @@ let _firestoreDebounceTimer = null; // handle pour le debounce d'écriture
     <div>
       <div class="section-header">
         <div class="section-title">Repas du jour</div>
-        <button class="btn-add" onclick="openAddFood()">+ Ajouter</button>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="copy-day-btn" onclick="copyDay()" title="Copier le jour entier">📋 Jour</button>
+          <button class="btn-add" onclick="openAddFood()">+ Ajouter</button>
+        </div>
       </div>
       <div class="clipboard-bar" id="clipboardBar">
         <div class="clipboard-info">
@@ -3300,10 +3313,20 @@ function updateHeader() {
   else {
     document.getElementById('dateLabelNav').textContent = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
   }
+  const todayBtn = document.getElementById('todayBtn');
+  if (todayBtn) todayBtn.style.display = dayOffset !== 0 ? 'inline-flex' : 'none';
 }
 
 function changeDay(d) {
   dayOffset += d;
+  updateHeader();
+  updateStats();
+  renderMealsList();
+  renderWater();
+}
+
+function goToToday() {
+  dayOffset = 0;
   updateHeader();
   updateStats();
   renderMealsList();
@@ -5323,6 +5346,7 @@ function _syncToLocalStorage() {
     localStorage.setItem('nutriai_custom_filters', JSON.stringify(customFilters));
     localStorage.setItem('nutriai_day_types',      JSON.stringify(dayTypes));
     localStorage.setItem('nutriai_settings',       JSON.stringify(uiSettings));
+    if (_apiKey) localStorage.setItem('nutriai_api_key', _apiKey);
   } catch(e) {}
 }
 
@@ -5364,6 +5388,7 @@ function saveToFirestore() {
       custom_filters: customFilters,
       day_types:      dayTypes,
       settings:       uiSettings,
+      api_key:        _apiKey,
       lastUpdated:    firebase.firestore.FieldValue.serverTimestamp(),
     };
     db.collection('users').doc(currentUser.uid).set(payload)
