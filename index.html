@@ -2596,10 +2596,10 @@ let _firestoreDebounceTimer = null; // handle pour le debounce d'écriture
         <div class="header-sub" id="todayDateLabel">— — —</div>
       </div>
       <div class="date-nav">
+        <button class="today-btn" id="todayBtn" onclick="goToToday()" title="Revenir au jour actuel" style="display:none;">⟳ Auj.</button>
         <button onclick="changeDay(-1)">◀</button>
         <div class="date-label" id="dateLabelNav">Aujourd'hui</div>
         <button onclick="changeDay(1)">▶</button>
-        <button class="today-btn" id="todayBtn" onclick="goToToday()" title="Revenir au jour actuel" style="display:none;">⟳ Auj.</button>
       </div>
     </div>
 
@@ -4999,13 +4999,13 @@ function saveRecipeEditor() {
     fat:  parseInt(document.getElementById('reFat').value)  || 0,
     ingredients: ingredients.length ? ingredients : ['—'],
     steps: steps.length ? steps : ['—'],
-    origin: 'ai',
     ...(sourceUrl ? { sourceUrl, sourceName } : {}),
   };
 
   if (_editingRecipeId === null) {
-    // New recipe
+    // New recipe — created manually by the user, no AI origin
     recipeData.id = ++_webRecipeIdCounter;
+    recipeData.origin = 'user';
     customRecipes.push(recipeData);
     showToast(`✅ "${name}" ajoutée !`);
   } else {
